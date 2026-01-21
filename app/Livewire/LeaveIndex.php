@@ -6,6 +6,10 @@ use Livewire\Component;
 
 use App\Models\Leave;
 use Livewire\WithPagination;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\LeaveSubmitted;
+use App\Models\User;
+use App\Mail\LeaveStatusUpdated;
 
 class LeaveIndex extends Component
 {
@@ -22,13 +26,22 @@ class LeaveIndex extends Component
     {
         $this->validate();
 
-        Leave::create([
+        $leave = Leave::create([
             'user_id'    => auth()->id(),
             'start_date' => $this->start_date,
             'end_date'   => $this->end_date,
             'reason'     => $this->reason,
             'status'     => 'pending'
         ]);
+
+        // 2. LOGIC KIRIM EMAIL (Cari Admin & Kirim)
+        $recipients = User::whereIn('role', ['administrator', 'supervisor'])
+                          ->pluck('email')
+                          ->toArray();
+        
+        if (!empty($recipients)) {
+            Mail::to($recipients)->send(new LeaveSubmitted($leave));
+        }
 
         $this->reset(['start_date', 'end_date', 'reason']);
         session()->flash('message', 'Leave request submitted successfully! Waiting for approval.');
@@ -39,6 +52,13 @@ class LeaveIndex extends Component
     {
         $leave = Leave::findOrFail($id);
         $leave->update(['status' => 'approved']);
+
+        // LOGIC BARU: Kirim Email ke Karyawan yang mengajukan
+        if ($leave->user->email) {
+            Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+        }
+
+
         session()->flash('message', 'Leave request APPROVED.');
     }
 
@@ -46,7 +66,13 @@ class LeaveIndex extends Component
     {
         $leave = Leave::findOrFail($id);
         // Bisa tambah admin_note kalau mau, tapi ini simpel dulu
-        $leave->update(['status' => 'rejected']); 
+        $leave->update(['status' => 'rejected']);
+        
+        // LOGIC BARU: Kirim Email ke Karyawan yang mengajukan
+        if ($leave->user->email) {
+            Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+        }
+
         session()->flash('error', 'Leave request REJECTED.');
     }
 

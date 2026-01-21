@@ -5,8 +5,9 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\User;
 use App\Models\Position;
-use App\Models\Attendance; // <--- Wajib Import
-use Carbon\Carbon;         // <--- Wajib Import
+use App\Models\Attendance;
+use Carbon\Carbon;        
+use App\Models\Leave;
 
 class Dashboard extends Component
 {
@@ -59,9 +60,6 @@ class Dashboard extends Component
 
         $bonus = 0;
 
-        // SYARAT DAPAT 100RB:
-        // 1. Tidak Telat (status == 'present')
-        // 2. Pulang lebih dari jam 18:30
         if ($attendance->status == 'present' && $jamPulang->gte($batasLembur)) {
             $bonus = 100000;
         }
@@ -75,36 +73,69 @@ class Dashboard extends Component
 
     public function render()
     {
-        // 1. Data Card Statistik
-        $totalEmployees = User::where('role', 'user')->count();
-        $totalPositions = Position::count();
-        
-        // 2. Cek Absen Harian User yang Login (INI YANG DICARI ERROR TADI)
+        $user = auth()->user();
+        $today = Carbon::today();
+
+        // A. Variabel Default
+        $totalEmployees = 0;
+        $presentToday = 0;
+        $lateToday = 0;
+        $onLeaveToday = 0;
+
+        // B. Logic Pembeda (Admin vs User Biasa)
+        if ($user->role !== 'user') {
+            // --- LOGIC ADMIN (Lihat Data Satu Kantor) ---
+            $totalEmployees = User::where('role', '!=', 'administrator')->count();
+            
+            $presentToday = Attendance::whereDate('date', $today)->count();
+            
+            $lateToday = Attendance::whereDate('date', $today)
+                        ->where('status', 'late')
+                        ->count();
+
+            $onLeaveToday = Leave::where('status', 'approved')
+                        ->whereDate('start_date', '<=', $today)
+                        ->whereDate('end_date', '>=', $today)
+                        ->count();
+        } else {
+            // --- LOGIC USER (Lihat Data Diri Sendiri Bulan Ini) ---
+            // Kita ubah variabel 'totalEmployees' jadi hitungan hadir bulan ini biar card-nya kepakai
+            $presentToday = Attendance::where('user_id', $user->id)
+                        ->whereMonth('date', Carbon::now()->month)
+                        ->count();
+            
+            $lateToday = Attendance::where('user_id', $user->id)
+                        ->whereMonth('date', Carbon::now()->month)
+                        ->where('status', 'late')
+                        ->count();
+                        
+            $onLeaveToday = Leave::where('user_id', $user->id)
+                        ->where('status', 'pending')
+                        ->count();
+        }
+
+        // C. Data Tombol Absen (Wajib ada biar tombol Check In/Out muncul)
         $todayAttendance = Attendance::where('user_id', auth()->id())
-                            ->where('date', date('Y-m-d'))
+                            ->whereDate('date', $today)
                             ->first();
 
-        // 3. Data untuk Grafik (7 Hari Terakhir)
+        // D. Data Grafik (Tetap pakai kodingan lama kamu)
         $chartLabels = [];
         $chartData = [];
-
         for ($i = 6; $i >= 0; $i--) {
             $date = Carbon::today()->subDays($i);
-            
-            // Label Sumbu X (Contoh: "21 Jan")
             $chartLabels[] = $date->format('d M');
-            
-            // Data Sumbu Y (Jumlah Karyawan Hadir)
             $chartData[] = Attendance::where('date', $date->format('Y-m-d'))
                 ->whereNotNull('check_in_time')
                 ->count();
         }
 
-        // 4. Kirim Semua Data ke View
         return view('livewire.dashboard', [
-            'totalEmployees'  => $totalEmployees,
-            'totalPositions'  => $totalPositions,
-            'todayAttendance' => $todayAttendance,
+            'totalEmployees'  => $totalEmployees, // Kalau user, ini isinya 0 (bisa diabaikan di view)
+            'presentToday'    => $presentToday,
+            'lateToday'       => $lateToday,
+            'onLeaveToday'    => $onLeaveToday,
+            'todayAttendance' => $todayAttendance, // Untuk tombol Check In/Out
             'chartLabels'     => $chartLabels,
             'chartData'       => $chartData
         ])->layout('layouts.app');
