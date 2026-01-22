@@ -40,7 +40,7 @@
         </tr>
         <tr>
             <td class="label">Period:</td>
-            <td>{{ \Carbon\Carbon::createFromFormat('m-Y', $payroll->month)->format('F Y') }}</td>
+            <td>{{ \Carbon\Carbon::parse($payroll->month)->format('F Y') }}</td>
         </tr>
     </table>
 

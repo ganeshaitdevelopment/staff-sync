@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\LeaveSubmitted;
 use App\Models\User;
 use App\Mail\LeaveStatusUpdated;
+use Illuminate\Support\Facades\Log;
 
 class LeaveIndex extends Component
 {
@@ -40,11 +41,15 @@ class LeaveIndex extends Component
                           ->toArray();
         
         if (!empty($recipients)) {
-            Mail::to($recipients)->send(new LeaveSubmitted($leave));
+            try {
+                Mail::to($recipients)->send(new LeaveSubmitted($leave));
+            } catch (\Exception $e) {
+                Log::error("Gagal kirim email submit: " . $e->getMessage());
+            }
         }
 
         $this->reset(['start_date', 'end_date', 'reason']);
-        session()->flash('message', 'Leave request submitted successfully! Waiting for approval.');
+        session()->flash('message', 'Leave request submitted successfully!');
     }
 
     // === FITUR ADMIN (Approval) ===
@@ -55,7 +60,14 @@ class LeaveIndex extends Component
 
         // LOGIC BARU: Kirim Email ke Karyawan yang mengajukan
         if ($leave->user->email) {
-            Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+            // Coba kirim email
+            try {
+                Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+                Log::info("✅ Email Approve berhasil dikirim ke: " . $leave->user->email);
+                
+            } catch (\Exception $e) {
+                Log::error("❌ Gagal kirim email approve: " . $e->getMessage());
+            }
         }
 
 
@@ -65,12 +77,15 @@ class LeaveIndex extends Component
     public function reject($id)
     {
         $leave = Leave::findOrFail($id);
-        // Bisa tambah admin_note kalau mau, tapi ini simpel dulu
         $leave->update(['status' => 'rejected']);
         
-        // LOGIC BARU: Kirim Email ke Karyawan yang mengajukan
         if ($leave->user->email) {
-            Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+            try {
+                Mail::to($leave->user->email)->send(new LeaveStatusUpdated($leave));
+                Log::info("✅ Email REJECTED terkirim ke: " . $leave->user->email);
+            } catch (\Exception $e) {
+                Log::error("❌ Gagal kirim email reject: " . $e->getMessage());
+            }
         }
 
         session()->flash('error', 'Leave request REJECTED.');
@@ -86,16 +101,7 @@ class LeaveIndex extends Component
         if ($user->role !== 'user') {
             $incomingRequests = Leave::with('user')
                 ->where('status', 'pending')
-                ->where('user_id', '!=', $user->id) // Jangan tampilkan cuti sendiri di approval
-                ->latest()
-                ->get();
-        }
-
-        $incomingRequests = [];
-        if ($user->role !== 'user') {
-            $incomingRequests = Leave::with('user')
-                ->where('status', 'pending')
-                ->where('user_id', '!=', $user->id) // Jangan tampilkan cuti sendiri di approval
+                ->where('user_id', '!=', $user->id)
                 ->latest()
                 ->get();
         }

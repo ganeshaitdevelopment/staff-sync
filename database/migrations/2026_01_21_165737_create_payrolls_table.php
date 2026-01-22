@@ -13,12 +13,13 @@ return new class extends Migration
     {
         Schema::create('payrolls', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('month'); // Contoh: "01-2026"
             $table->decimal('basic_salary', 15, 2);
-            $table->decimal('overtime_salary', 15, 2);
+            $table->decimal('overtime_pay', 15, 2)->default(0);
+            $table->decimal('deductions', 15, 2)->default(0);
             $table->decimal('total_salary', 15, 2);
-            $table->enum('status', ['paid', 'pending'])->default('pending'); // Status pembayaran
+            $table->enum('status', ['pending', 'paid'])->default('pending');            
             $table->timestamps();
         });
     }

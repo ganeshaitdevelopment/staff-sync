@@ -22,7 +22,6 @@ class LeaveStatusUpdated extends Mailable
 
     public function envelope(): Envelope
     {
-        // Subjek dinamis: "Leave Request Approved" atau "Leave Request Rejected"
         return new Envelope(
             subject: 'Leave Request ' . ucfirst($this->leave->status) . ' - StaffSync',
         );
